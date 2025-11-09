@@ -1,4 +1,5 @@
 #include <pebble.h>
+#include "math.h"
 
 static Window *s_main_window;
 static Layer *s_canvas_layer;
@@ -12,6 +13,11 @@ static GBitmap *s_am_pm_indicator;
 static bool s_dark_mode = false;
 static bool s_show_am_pm = true;
 static int s_time_format = 12;
+
+// Rotating dot variables
+static int s_current_second = 0;
+static int s_current_minute = 0;
+static int s_current_hour = 0;
 
 // Function to invert bitmap palette for dark mode
 static void invert_bitmap_palette(GBitmap *bitmap) {
@@ -154,8 +160,17 @@ static void draw_digit(GContext *ctx, int digit, DigitType type, int x, int y) {
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
-  // Only refresh the display when minutes change to reduce CPU usage
+  // Update current time values and refresh display
+  if (units_changed & SECOND_UNIT) {
+    s_current_second = tick_time->tm_sec;
+    layer_mark_dirty(s_canvas_layer);
+  }
   if (units_changed & MINUTE_UNIT) {
+    s_current_minute = tick_time->tm_min;
+    layer_mark_dirty(s_canvas_layer);
+  }
+  if (units_changed & HOUR_UNIT) {
+    s_current_hour = tick_time->tm_hour;
     layer_mark_dirty(s_canvas_layer);
   }
 }
@@ -260,6 +275,84 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   
   GRect bounds = layer_get_bounds(layer);
   
+  // Draw rotating dot around circular path (behind everything)
+  // Calculate angle based on current second (60 seconds = 360 degrees)
+  // Start at top center (12 o'clock position) by subtracting PI/2
+  float angle = ((s_current_second / 60.0f) * 2.0f * M_PI) - M_PI_2;
+  
+  // Circular path parameters
+  int center_x = bounds.size.w / 2;
+  int center_y = bounds.size.h / 2;
+  int radius = 50; // Radius of circular path
+  
+  // Calculate dot position using trigonometric functions
+  int dot_x = center_x + (int)(radius * my_cos(angle));
+  int dot_y = center_y + (int)(radius * my_sin(angle));
+  
+  // Set dot color based on dark mode
+  if (s_dark_mode) {
+    graphics_context_set_fill_color(ctx, GColorWhite);
+  } else {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+  }
+  
+  // Draw 8px second dot
+  graphics_fill_circle(ctx, GPoint(dot_x, dot_y), 4); // 4px radius = 8px diameter
+  
+  // Draw minute dot around circular path
+  // Calculate angle based on current minute (60 minutes = 360 degrees)
+  // Start at top center (12 o'clock position) by subtracting PI/2
+  float minute_angle = ((s_current_minute / 60.0f) * 2.0f * M_PI) - M_PI_2;
+  
+  // Calculate minute dot position using trigonometric functions
+  int minute_dot_x = center_x + (int)(radius * my_cos(minute_angle));
+  int minute_dot_y = center_y + (int)(radius * my_sin(minute_angle));
+  
+  // Set minute dot color to solid black (or white in dark mode)
+  if (s_dark_mode) {
+    graphics_context_set_fill_color(ctx, GColorWhite);
+  } else {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+  }
+  
+  // Draw 8px minute dot
+  graphics_fill_circle(ctx, GPoint(minute_dot_x, minute_dot_y), 4); // 4px radius = 8px diameter
+  
+  // Draw hour dot around circular path
+  // Calculate angle based on current hour and minutes for more accuracy
+  // 12 hours = 360 degrees, plus minutes contribute to hour position
+  // Convert to 12-hour format for proper positioning
+  int display_hour = s_current_hour % 12;
+  if (display_hour == 0) display_hour = 12; // Handle 12 o'clock case
+  float hour_angle = (((display_hour + (s_current_minute / 60.0f)) / 12.0f) * 2.0f * M_PI) - M_PI_2;
+  
+  // Calculate hour dot position using trigonometric functions
+  int hour_dot_x = center_x + (int)(radius * my_cos(hour_angle));
+  int hour_dot_y = center_y + (int)(radius * my_sin(hour_angle));
+  
+  // Set all dots to solid black (or white in dark mode)
+  if (s_dark_mode) {
+    graphics_context_set_fill_color(ctx, GColorWhite);
+  } else {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+  }
+  
+  // Draw 8px hour dot
+  graphics_fill_circle(ctx, GPoint(hour_dot_x, hour_dot_y), 4); // 4px radius = 8px diameter
+  
+  // Draw white rectangle behind time display to obscure dot
+  int time_display_height = SPRITE_HEIGHT; // Exact sprite height
+  int time_display_width = total_width; // Exact total width
+  int time_display_x = (bounds.size.w - time_display_width) / 2;
+  int time_display_y = (bounds.size.h - time_display_height) / 2;
+  
+  if (s_dark_mode) {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+  } else {
+    graphics_context_set_fill_color(ctx, GColorWhite);
+  }
+  graphics_fill_rect(ctx, GRect(time_display_x, time_display_y, time_display_width, time_display_height), 0, GCornerNone);
+  
   // Starting X position to center the time display
   int start_x = (bounds.size.w - total_width) / 2;
   int y_pos = (bounds.size.h - SPRITE_HEIGHT) / 2;
@@ -332,12 +425,20 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       gbitmap_destroy(am_pm_bitmap);
     }
   }
+  
 }
 
 static void main_window_load(Window *window)
 {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
+  
+  // Initialize time variables with current time
+  time_t temp = time(NULL);
+  struct tm *tick_time = localtime(&temp);
+  s_current_second = tick_time->tm_sec;
+  s_current_minute = tick_time->tm_min;
+  s_current_hour = tick_time->tm_hour;
   
   // Create canvas layer for drawing first
   s_canvas_layer = layer_create(bounds);
@@ -392,8 +493,8 @@ static void main_window_load(Window *window)
   // Force initial redraw
   layer_mark_dirty(s_canvas_layer);
   
-  // Subscribe to tick timer service for updates - use MINUTE_UNIT to reduce CPU usage
-  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  // Subscribe to tick timer service for updates - include all time units for rotating dots
+  tick_timer_service_subscribe(MINUTE_UNIT | SECOND_UNIT | HOUR_UNIT, tick_handler);
 }
 
 static void main_window_unload(Window *window)
