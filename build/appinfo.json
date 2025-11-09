@@ -1,0 +1,46 @@
+{
+    "displayName": "fiftyeight",
+    "uuid": "eef69cfc-f0b2-44fd-b99f-576d56588ab4",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+        "aplite",
+        "diorite",
+        "flint"
+    ],
+    "watchapp": {
+        "watchface": true
+    },
+    "resources": {
+        "media": [
+            {
+                "type": "bitmap",
+                "name": "PRIORITY_DIGIT",
+                "file": "font sprites/priority-digit.png"
+            },
+            {
+                "type": "bitmap",
+                "name": "LESSER_DIGIT",
+                "file": "font sprites/lesser-digit.png"
+            },
+            {
+                "type": "bitmap",
+                "name": "LEAST_DIGIT",
+                "file": "font sprites/least-digit.png"
+            },
+            {
+                "type": "bitmap",
+                "name": "AM_PM_INDICATOR",
+                "file": "font sprites/A-P.png"
+            }
+        ]
+    },
+    "name": "fiftyeight",
+    "shortName": "fiftyeight",
+    "longName": "fiftyeight",
+    "versionLabel": "1.0",
+    "companyName": "EuphoricPenguin",
+    "messageKeys": {},
+    "appKeys": {},
+    "capabilities": []
+}
