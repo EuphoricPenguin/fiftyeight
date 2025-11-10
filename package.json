@@ -50,6 +50,16 @@
           "type": "bitmap",
           "name": "AM_PM_INDICATOR",
           "file": "font sprites/A-P.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "DAY_SPRITES",
+          "file": "font sprites/day.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "DATE_SPRITES",
+          "file": "font sprites/date.png"
         }
       ]
     }
