@@ -66,6 +66,11 @@
           "type": "bitmap",
           "name": "DATE_SPRITES",
           "file": "font sprites/date.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "DATE_HALF_SPRITES",
+          "file": "font sprites/date-half.png"
         }
       ]
     }
