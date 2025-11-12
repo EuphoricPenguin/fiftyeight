@@ -33,6 +33,12 @@
     "resources": {
       "media": [
         {
+          "file": "images/MenuImage.png",
+          "menuIcon": true,
+          "name": "RESOURCE_ID_IMAGE_MENUICON",
+          "type": "bitmap"
+        },
+        {
           "type": "bitmap",
           "name": "PRIORITY_DIGIT",
           "file": "font sprites/priority-digit.png"
