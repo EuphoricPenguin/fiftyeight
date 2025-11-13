@@ -28,7 +28,8 @@
       "DarkMode",
       "ShowAmPm",
       "Use24HourFormat",
-      "UseTwoLetterDay"
+      "UseTwoLetterDay",
+      "DebugMode"
     ],
     "resources": {
       "media": [
@@ -62,11 +63,6 @@
           "type": "bitmap",
           "name": "DATE_SPRITES",
           "file": "font sprites/date.png"
-        },
-        {
-          "type": "bitmap",
-          "name": "DATE_HALF_SPRITES",
-          "file": "font sprites/date-half.png"
         }
       ]
     }

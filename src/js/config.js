@@ -37,6 +37,13 @@ module.exports = [
         "label": "Two-Letter Day Abbreviations",
         "defaultValue": false,
         "description": "Use 2-letter day abbreviations instead of 3-letter"
+      },
+      {
+        "type": "toggle",
+        "messageKey": "DebugMode",
+        "label": "Debug Mode",
+        "defaultValue": false,
+        "description": "Enable debug mode to cycle through all graphics for evaluation"
       }
     ]
   },
