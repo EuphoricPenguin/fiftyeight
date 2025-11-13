@@ -50,16 +50,6 @@
         },
         {
           "type": "bitmap",
-          "name": "LESSER_DIGIT",
-          "file": "font sprites/lesser-digit.png"
-        },
-        {
-          "type": "bitmap",
-          "name": "LEAST_DIGIT",
-          "file": "font sprites/least-digit.png"
-        },
-        {
-          "type": "bitmap",
           "name": "AM_PM_INDICATOR",
           "file": "font sprites/A-P.png"
         },
