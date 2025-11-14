@@ -25,6 +25,19 @@ typedef struct {
     WidgetType top_right_widget;
 } WidgetConfig;
 
+// Settings struct for persistent storage
+typedef struct Settings
+{
+    bool dark_mode;
+    bool use_24_hour_format;
+    bool use_two_letter_day;
+    bool debug_mode;
+    bool show_second_dot;
+    bool show_hour_minute_dots;
+    int step_goal;
+    WidgetConfig widget_config;
+} Settings;
+
 // Function declarations
 void widgets_init(void);
 void widgets_deinit(void);

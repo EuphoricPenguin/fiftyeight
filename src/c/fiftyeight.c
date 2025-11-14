@@ -1,6 +1,7 @@
 #include <pebble.h>
 #include "math.h"
 #include "widgets.h"
+#include "config.h"
 
 static Window *s_main_window;
 static Layer *s_canvas_layer;
@@ -19,40 +20,15 @@ static void debug_timer_callback(void *data);
 #define SETTINGS_KEY 1
 
 // Message keys for Clay configuration
-#define MESSAGE_KEY_ShowSecondDot 100
-#define MESSAGE_KEY_ShowHourMinuteDots 101
+#define MESSAGE_KEY_ShowSecondDot 10007
+#define MESSAGE_KEY_ShowHourMinuteDots 10008
 
 // External settings for widget system
 bool s_settings_use_24_hour_format = false;
 bool s_settings_dark_mode = false;
 
-// Settings struct for persistent storage
-typedef struct Settings
-{
-    bool dark_mode;
-    bool use_24_hour_format;
-    bool use_two_letter_day;
-    bool debug_mode;
-    bool show_second_dot;
-    bool show_hour_minute_dots;
-    int step_goal;
-    WidgetConfig widget_config;
-} Settings;
 
-static Settings s_settings =
-{
-    .dark_mode = false,
-    .use_24_hour_format = false,
-    .use_two_letter_day = false,
-    .debug_mode = false,
-    .show_second_dot = true,
-    .show_hour_minute_dots = true,
-    .step_goal = 10000,
-    .widget_config = {
-        .top_left_widget = WIDGET_MONTH_DATE,
-        .top_right_widget = WIDGET_DAY_DATE
-    }
-};
+static Settings s_settings;
 
 // Function to save settings to persistent storage
 static void prv_save_settings()
@@ -137,12 +113,36 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
     // Handle new dot visibility settings
     Tuple *show_second_dot_t = dict_find(iter, MESSAGE_KEY_ShowSecondDot);
     if (show_second_dot_t) {
-        s_settings.show_second_dot = show_second_dot_t->value->int32 == 1;
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot received - type: %d", show_second_dot_t->type);
+        bool new_show_second_dot;
+        if (show_second_dot_t->type == TUPLE_CSTRING) {
+            // Convert string to boolean
+            const char *show_second_dot_str = show_second_dot_t->value->cstring;
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot as string: '%s'", show_second_dot_str);
+            new_show_second_dot = (strcmp(show_second_dot_str, "true") == 0 || strcmp(show_second_dot_str, "1") == 0);
+        } else {
+            // Use integer value directly
+            new_show_second_dot = show_second_dot_t->value->int32 == 1;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot setting changed: %d -> %d", s_settings.show_second_dot, new_show_second_dot);
+        s_settings.show_second_dot = new_show_second_dot;
     }
     
     Tuple *show_hour_minute_dots_t = dict_find(iter, MESSAGE_KEY_ShowHourMinuteDots);
     if (show_hour_minute_dots_t) {
-        s_settings.show_hour_minute_dots = show_hour_minute_dots_t->value->int32 == 1;
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots received - type: %d", show_hour_minute_dots_t->type);
+        bool new_show_hour_minute_dots;
+        if (show_hour_minute_dots_t->type == TUPLE_CSTRING) {
+            // Convert string to boolean
+            const char *show_hour_minute_dots_str = show_hour_minute_dots_t->value->cstring;
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots as string: '%s'", show_hour_minute_dots_str);
+            new_show_hour_minute_dots = (strcmp(show_hour_minute_dots_str, "true") == 0 || strcmp(show_hour_minute_dots_str, "1") == 0);
+        } else {
+            // Use integer value directly
+            new_show_hour_minute_dots = show_hour_minute_dots_t->value->int32 == 1;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots setting changed: %d -> %d", s_settings.show_hour_minute_dots, new_show_hour_minute_dots);
+        s_settings.show_hour_minute_dots = new_show_hour_minute_dots;
     }
     
     // Handle step goal configuration
@@ -601,6 +601,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
     int center_y = bounds.size.h / 2;
     int radius = 50; // Radius of circular path
     // Draw hour and minute dots if enabled
+    APP_LOG(APP_LOG_LEVEL_INFO, "Drawing dots - show_hour_minute_dots: %d, show_second_dot: %d", 
+            s_settings.show_hour_minute_dots, s_settings.show_second_dot);
     if (s_settings.show_hour_minute_dots) {
         // Draw hour dot around circular path (behind everything)
         // Calculate angle based on current hour and minutes for more accuracy
@@ -852,7 +854,10 @@ static void main_window_unload(Window *window)
 
 static void init()
 {
-    // Load settings from persistent storage
+    // Initialize settings with defaults first
+    s_settings = get_default_settings();
+    
+    // Load settings from persistent storage (will override defaults if they exist)
     prv_load_settings();
     
     // Link settings to widget system

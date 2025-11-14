@@ -31,7 +31,9 @@
       "DebugMode",
       "TopLeftWidget",
       "TopRightWidget",
-      "StepGoal"
+      "StepGoal",
+      "ShowSecondDot",
+      "ShowHourMinuteDots"
     ],
     "resources": {
       "media": [
