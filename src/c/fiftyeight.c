@@ -1,13 +1,13 @@
 #include <pebble.h>
 #include "math.h"
+#include "widgets.h"
+#include "config.h"
 
 static Window *s_main_window;
 static Layer *s_canvas_layer;
 static GBitmap *s_priority_sprites;
 static GBitmap *s_subpriority_sprites;
-static GBitmap *s_am_pm_indicator;
 static GBitmap *s_day_sprites;
-static GBitmap *s_date_sprites;
 
 // Debug mode variables
 static int s_debug_counter = 0;
@@ -19,24 +19,16 @@ static void debug_timer_callback(void *data);
 // Persistent storage key
 #define SETTINGS_KEY 1
 
-// Settings struct for persistent storage
-typedef struct Settings
-{
-    bool dark_mode;
-    bool show_am_pm;
-    bool use_24_hour_format;
-    bool use_two_letter_day;
-    bool debug_mode;
-} Settings;
+// Message keys for Clay configuration
+#define MESSAGE_KEY_ShowSecondDot 10007
+#define MESSAGE_KEY_ShowHourMinuteDots 10008
 
-static Settings s_settings =
-{
-    .dark_mode = false,
-    .show_am_pm = false,
-    .use_24_hour_format = false,
-    .use_two_letter_day = false,
-    .debug_mode = false
-};
+// External settings for widget system
+bool s_settings_use_24_hour_format = false;
+bool s_settings_dark_mode = false;
+
+
+static Settings s_settings;
 
 // Function to save settings to persistent storage
 static void prv_save_settings()
@@ -63,24 +55,18 @@ static void prv_reload_sprites()
     // Clean up existing sprites
     if (s_priority_sprites) gbitmap_destroy(s_priority_sprites);
     if (s_subpriority_sprites) gbitmap_destroy(s_subpriority_sprites);
-    if (s_am_pm_indicator) gbitmap_destroy(s_am_pm_indicator);
     if (s_day_sprites) gbitmap_destroy(s_day_sprites);
-    if (s_date_sprites) gbitmap_destroy(s_date_sprites);
     // Reload all sprite sheets
     s_priority_sprites = gbitmap_create_with_resource(RESOURCE_ID_PRIORITY_DIGIT);
     s_subpriority_sprites = gbitmap_create_with_resource(
                                 RESOURCE_ID_SUBPRIORITY_DIGIT);
-    s_am_pm_indicator = gbitmap_create_with_resource(RESOURCE_ID_AM_PM_INDICATOR);
     s_day_sprites = gbitmap_create_with_resource(RESOURCE_ID_DAY_SPRITES);
-    s_date_sprites = gbitmap_create_with_resource(RESOURCE_ID_DATE_SPRITES);
     // Invert palette colors for dark mode if enabled
     if (s_settings.dark_mode)
     {
         invert_bitmap_palette(s_priority_sprites);
         invert_bitmap_palette(s_subpriority_sprites);
-        invert_bitmap_palette(s_am_pm_indicator);
         invert_bitmap_palette(s_day_sprites);
-        invert_bitmap_palette(s_date_sprites);
     }
 }
 
@@ -95,11 +81,6 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
         bool new_dark_mode = dark_mode_t->value->int32 == 1;
         dark_mode_changed = (s_settings.dark_mode != new_dark_mode);
         s_settings.dark_mode = new_dark_mode;
-    }
-    Tuple *show_am_pm_t = dict_find(iter, MESSAGE_KEY_ShowAmPm);
-    if (show_am_pm_t)
-    {
-        s_settings.show_am_pm = show_am_pm_t->value->int32 == 1;
     }
     Tuple *use_24_hour_format_t = dict_find(iter, MESSAGE_KEY_Use24HourFormat);
     if (use_24_hour_format_t)
@@ -128,12 +109,121 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
             s_debug_timer = NULL;
         }
     }
+    
+    // Handle new dot visibility settings
+    Tuple *show_second_dot_t = dict_find(iter, MESSAGE_KEY_ShowSecondDot);
+    if (show_second_dot_t) {
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot received - type: %d", show_second_dot_t->type);
+        bool new_show_second_dot;
+        if (show_second_dot_t->type == TUPLE_CSTRING) {
+            // Convert string to boolean
+            const char *show_second_dot_str = show_second_dot_t->value->cstring;
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot as string: '%s'", show_second_dot_str);
+            new_show_second_dot = (strcmp(show_second_dot_str, "true") == 0 || strcmp(show_second_dot_str, "1") == 0);
+        } else {
+            // Use integer value directly
+            new_show_second_dot = show_second_dot_t->value->int32 == 1;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot setting changed: %d -> %d", s_settings.show_second_dot, new_show_second_dot);
+        s_settings.show_second_dot = new_show_second_dot;
+    }
+    
+    Tuple *show_hour_minute_dots_t = dict_find(iter, MESSAGE_KEY_ShowHourMinuteDots);
+    if (show_hour_minute_dots_t) {
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots received - type: %d", show_hour_minute_dots_t->type);
+        bool new_show_hour_minute_dots;
+        if (show_hour_minute_dots_t->type == TUPLE_CSTRING) {
+            // Convert string to boolean
+            const char *show_hour_minute_dots_str = show_hour_minute_dots_t->value->cstring;
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots as string: '%s'", show_hour_minute_dots_str);
+            new_show_hour_minute_dots = (strcmp(show_hour_minute_dots_str, "true") == 0 || strcmp(show_hour_minute_dots_str, "1") == 0);
+        } else {
+            // Use integer value directly
+            new_show_hour_minute_dots = show_hour_minute_dots_t->value->int32 == 1;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots setting changed: %d -> %d", s_settings.show_hour_minute_dots, new_show_hour_minute_dots);
+        s_settings.show_hour_minute_dots = new_show_hour_minute_dots;
+    }
+    
+    // Handle step goal configuration
+    Tuple *step_goal_t = dict_find(iter, MESSAGE_KEY_StepGoal);
+    if (step_goal_t) {
+        // Handle both string and integer values from Clay
+        int32_t step_goal_value;
+        if (step_goal_t->type == TUPLE_CSTRING) {
+            // Convert string to integer with better error handling
+            const char *step_goal_str = step_goal_t->value->cstring;
+            step_goal_value = atoi(step_goal_str);
+            APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as string: '%s' -> %ld", step_goal_str, (long)step_goal_value);
+            
+            // Validate the conversion
+            if (step_goal_value <= 0) {
+                APP_LOG(APP_LOG_LEVEL_WARNING, "Invalid step goal conversion, using default: %ld", (long)step_goal_value);
+                step_goal_value = 10000; // Default step goal
+            }
+        } else {
+            // Use integer value directly
+            step_goal_value = step_goal_t->value->int32;
+            APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as int: %ld (type: %d)", (long)step_goal_value, step_goal_t->type);
+        }
+        // Save step goal to settings
+        s_settings.step_goal = step_goal_value;
+        // Update widget system with new step goal
+        widgets_set_step_goal(step_goal_value);
+    } else {
+        APP_LOG(APP_LOG_LEVEL_INFO, "No step_goal received, using saved value: %d", s_settings.step_goal);
+    }
+    
+    // Handle widget configuration
+    Tuple *top_left_widget_t = dict_find(iter, MESSAGE_KEY_TopLeftWidget);
+    if (top_left_widget_t) {
+        // Handle both string and integer values from Clay
+        int32_t widget_value;
+        if (top_left_widget_t->type == TUPLE_CSTRING) {
+            // Convert string to integer
+            widget_value = atoi(top_left_widget_t->value->cstring);
+        } else {
+            // Use integer value directly
+            widget_value = top_left_widget_t->value->int32;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "Received top_left_widget: %ld (type: %d)", (long)widget_value, top_left_widget_t->type);
+        s_settings.widget_config.top_left_widget = (WidgetType)widget_value;
+    } else {
+        APP_LOG(APP_LOG_LEVEL_INFO, "No top_left_widget received, using default");
+        s_settings.widget_config.top_left_widget = WIDGET_MONTH_DATE;
+    }
+    
+    Tuple *top_right_widget_t = dict_find(iter, MESSAGE_KEY_TopRightWidget);
+    if (top_right_widget_t) {
+        // Handle both string and integer values from Clay
+        int32_t widget_value;
+        if (top_right_widget_t->type == TUPLE_CSTRING) {
+            // Convert string to integer
+            widget_value = atoi(top_right_widget_t->value->cstring);
+        } else {
+            // Use integer value directly
+            widget_value = top_right_widget_t->value->int32;
+        }
+        APP_LOG(APP_LOG_LEVEL_INFO, "Received top_right_widget: %ld (type: %d)", (long)widget_value, top_right_widget_t->type);
+        s_settings.widget_config.top_right_widget = (WidgetType)widget_value;
+    } else {
+        APP_LOG(APP_LOG_LEVEL_INFO, "No top_right_widget received, using default");
+        s_settings.widget_config.top_right_widget = WIDGET_DAY_DATE;
+    }
+    
+    // Update widget configuration
+    widgets_set_config(s_settings.widget_config);
+    
+    // Update widget system settings
+    s_settings_dark_mode = s_settings.dark_mode;
+    
     // Save settings to persistent storage
     prv_save_settings();
     // If dark mode changed, reload sprites with correct palette
     if (dark_mode_changed)
     {
         prv_reload_sprites();
+        widgets_reload_sprites();
     }
     // Force redraw to apply new settings
     layer_mark_dirty(s_canvas_layer);
@@ -294,109 +384,7 @@ static void draw_day_char(GContext *ctx, char character, int x, int y)
 }
 
 
-// Function to draw a date number (digits from date.png)
-static void draw_date_number(GContext *ctx, int digit, int x, int y)
-{
-    // Validate sprite sheet exists
-    if (!s_date_sprites)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Date sprite sheet is NULL");
-        return;
-    }
-    // Validate sprite sheet bounds
-    GSize sprite_sheet_size = gbitmap_get_bounds(s_date_sprites).size;
-    if (sprite_sheet_size.w <= 0 || sprite_sheet_size.h <= 0)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Invalid date sprite sheet dimensions: %dx%d",
-                sprite_sheet_size.w, sprite_sheet_size.h);
-        return;
-    }
-    // Map digit to sprite position in the 3x4 grid
-    // Layout: 1,2,3,4,5,6,7,8,9,0
-    int sprite_index = -1;
-    switch (digit)
-    {
-        case 1: sprite_index = 0; break;
-        case 2: sprite_index = 1; break;
-        case 3: sprite_index = 2; break;
-        case 4: sprite_index = 3; break;
-        case 5: sprite_index = 4; break;
-        case 6: sprite_index = 5; break;
-        case 7: sprite_index = 6; break;
-        case 8: sprite_index = 7; break;
-        case 9: sprite_index = 8; break;
-        case 0: sprite_index = 9; break;
-        default:
-            APP_LOG(APP_LOG_LEVEL_ERROR, "Unknown date digit: %d", digit);
-            return;
-    }
-    // Calculate sprite position in the spritesheet
-    int sprite_row = sprite_index / DATE_SPRITES_PER_ROW;
-    int sprite_col = sprite_index % DATE_SPRITES_PER_ROW;
-    // Validate sprite position is within bounds
-    int max_col = sprite_sheet_size.w / DATE_WIDTH;
-    int max_row = sprite_sheet_size.h / DATE_HEIGHT;
-    if (sprite_col >= max_col || sprite_row >= max_row)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR,
-                "Date sprite position out of bounds: digit=%d, row=%d/%d, col=%d/%d",
-                digit, sprite_row, max_row, sprite_col, max_col);
-        return;
-    }
-    // Calculate source rectangle in the spritesheet
-    GRect source_rect = GRect(
-                            sprite_col * DATE_WIDTH,
-                            sprite_row * DATE_HEIGHT,
-                            DATE_WIDTH,
-                            DATE_HEIGHT
-                        );
-    // Calculate destination position
-    GRect dest_rect = GRect(x, y, DATE_WIDTH, DATE_HEIGHT);
-    // Set compositing mode for transparency
-    graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    // Create a sub-bitmap for the specific sprite
-    GBitmap *digit_bitmap = gbitmap_create_as_sub_bitmap(s_date_sprites,
-                            source_rect);
-    if (!digit_bitmap)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to create sub-bitmap for date digit %d",
-                digit);
-        return;
-    }
-    // Draw the sprite
-    graphics_draw_bitmap_in_rect(ctx, digit_bitmap, dest_rect);
-    // Clean up the sub-bitmap
-    gbitmap_destroy(digit_bitmap);
-}
 
-// Function to draw a month number
-static void draw_month_number(GContext *ctx, int month, int x, int y)
-{
-    // Month numbers are 1-12 (January=1, February=2, ..., December=12)
-    int month_number = month + 1; // Convert from 0-based to 1-based
-    // Draw month number using appropriate sprites
-    if (month_number < 10)
-    {
-        // Single digit month (1-9) - use full-width sprites
-        if (s_date_sprites)
-        {
-            draw_date_number(ctx, month_number, x, y);
-        }
-    }
-    else
-    {
-        // Two digit month (10, 11, 12)
-        int month_tens = month_number / 10;
-        int month_ones = month_number % 10;
-        int digit_spacing = 4; // Space between month digits
-        // Always use two full-size characters for months
-        if (s_date_sprites)
-        {
-            draw_date_number(ctx, month_tens, x, y);
-            draw_date_number(ctx, month_ones, x + DATE_WIDTH + digit_spacing, y);
-        }
-    }
-}
 
 // Digit types for width selection
 typedef enum
@@ -523,10 +511,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
     struct tm *tick_time = localtime(&temp);
     int hour = tick_time->tm_hour;
     int minute = tick_time->tm_min;
-    int calendar_day = tick_time->tm_mday;
-    int current_month = tick_time->tm_mon;
     int day_of_week = tick_time->tm_wday;
-    bool is_pm = (hour >= 12); // Determine AM/PM
     
     if (s_settings.debug_mode) {
         // Use debug counter to cycle through different combinations
@@ -554,27 +539,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
             case 19: hour = 20; minute = 2; break;
         }
         
-        // Date combinations: single digit, double digit with mixed sizes, double digit full size
-        switch ((s_debug_counter / 20) % 5) {
-            case 0: calendar_day = 1; break;  // Single digit
-            case 1: calendar_day = 12; break; // Mixed sizes (1 half, 2 full)
-            case 2: calendar_day = 23; break; // Mixed sizes (2 half, 3 full)
-            case 3: calendar_day = 11; break; // Double digit full size (repeating)
-            case 4: calendar_day = 31; break; // Double digit full size
-        }
-        
-        // Month combinations
-        switch ((s_debug_counter / 100) % 3) {
-            case 0: current_month = 0; break;  // January (1)
-            case 1: current_month = 9; break;  // October (10) - mixed sizes
-            case 2: current_month = 10; break; // November (11) - full size
-        }
-        
         // Weekday combinations
         day_of_week = (s_debug_counter / 5) % 7;
-        
-        // Force AM/PM to cycle
-        is_pm = (s_debug_counter % 2 == 0);
     }
     
     // Convert hour based on time format setting
@@ -634,66 +600,76 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
     int center_x = bounds.size.w / 2;
     int center_y = bounds.size.h / 2;
     int radius = 50; // Radius of circular path
-    // Draw hour dot around circular path (behind everything)
-    // Calculate angle based on current hour and minutes for more accuracy
-    // 12 hours = 360 degrees, plus minutes contribute to hour position
-    // Convert to 12-hour format for proper positioning
-    int display_hour = s_current_hour % 12;
-    if (display_hour == 0) display_hour = 12; // Handle 12 o'clock case
-    float hour_angle = (((display_hour + (s_current_minute / 60.0f)) / 12.0f) * 2.0f
-                        * M_PI) - M_PI_2;
-    // Calculate hour dot position using trigonometric functions
-    int hour_dot_x = center_x + (int)(radius * my_cos(hour_angle));
-    int hour_dot_y = center_y + (int)(radius * my_sin(hour_angle));
-    // Set hour dot color to gray for visibility
-    if (s_settings.dark_mode)
-    {
-        graphics_context_set_fill_color(ctx, GColorLightGray);
+    // Draw hour and minute dots if enabled
+    APP_LOG(APP_LOG_LEVEL_INFO, "Drawing dots - show_hour_minute_dots: %d, show_second_dot: %d", 
+            s_settings.show_hour_minute_dots, s_settings.show_second_dot);
+    if (s_settings.show_hour_minute_dots) {
+        // Draw hour dot around circular path (behind everything)
+        // Calculate angle based on current hour and minutes for more accuracy
+        // 12 hours = 360 degrees, plus minutes contribute to hour position
+        // Convert to 12-hour format for proper positioning
+        int display_hour = s_current_hour % 12;
+        if (display_hour == 0) display_hour = 12; // Handle 12 o'clock case
+        float hour_angle = (((display_hour + (s_current_minute / 60.0f)) / 12.0f) * 2.0f
+                            * M_PI) - M_PI_2;
+        // Calculate hour dot position using trigonometric functions
+        int hour_dot_x = center_x + (int)(radius * my_cos(hour_angle));
+        int hour_dot_y = center_y + (int)(radius * my_sin(hour_angle));
+        // Set hour dot color to gray for visibility
+        if (s_settings.dark_mode)
+        {
+            graphics_context_set_fill_color(ctx, GColorLightGray);
+        }
+        else
+        {
+            graphics_context_set_fill_color(ctx, GColorDarkGray);
+        }
+        // Draw 8px hour dot (behind minute and second hands)
+        graphics_fill_circle(ctx, GPoint(hour_dot_x, hour_dot_y),
+                             4); // 4px radius = 8px diameter
+        
+        // Draw minute dot around circular path (in front of hour hand)
+        // Calculate angle based on current minute (60 minutes = 360 degrees)
+        // Start at top center (12 o'clock position) by subtracting PI/2
+        float minute_angle = ((s_current_minute / 60.0f) * 2.0f * M_PI) - M_PI_2;
+        // Calculate minute dot position using trigonometric functions
+        int minute_dot_x = center_x + (int)(radius * my_cos(minute_angle));
+        int minute_dot_y = center_y + (int)(radius * my_sin(minute_angle));
+        // Set minute dot color to gray for visibility
+        if (s_settings.dark_mode)
+        {
+            graphics_context_set_fill_color(ctx, GColorLightGray);
+        }
+        else
+        {
+            graphics_context_set_fill_color(ctx, GColorDarkGray);
+        }
+        // Draw 8px minute dot (in front of hour hand)
+        graphics_fill_circle(ctx, GPoint(minute_dot_x, minute_dot_y),
+                             4); // 4px radius = 8px diameter
     }
-    else
-    {
-        graphics_context_set_fill_color(ctx, GColorDarkGray);
+    
+    // Draw second dot if enabled
+    if (s_settings.show_second_dot) {
+        // Draw second dot around circular path (in front of everything)
+        // Calculate angle based on current second (60 seconds = 360 degrees)
+        // Start at top center (12 o'clock position) by subtracting PI/2
+        float angle = ((s_current_second / 60.0f) * 2.0f * M_PI) - M_PI_2;
+        // Calculate dot position using trigonometric functions
+        int dot_x = center_x + (int)(radius * my_cos(angle));
+        int dot_y = center_y + (int)(radius * my_sin(angle));
+        // Set second dot color based on dark mode
+        if (s_settings.dark_mode)
+        {
+            graphics_context_set_fill_color(ctx, GColorWhite);
+        }
+        else
+        {
+            graphics_context_set_fill_color(ctx, GColorBlack);
+        }
+        // Draw 8px second dot (in front of minute and hour hands)
+        graphics_fill_circle(ctx, GPoint(dot_x, dot_y), 4); // 4px radius = 8px diameter
     }
-    // Draw 8px hour dot (behind minute and second hands)
-    graphics_fill_circle(ctx, GPoint(hour_dot_x, hour_dot_y),
-                         4); // 4px radius = 8px diameter
-    // Draw minute dot around circular path (in front of hour hand)
-    // Calculate angle based on current minute (60 minutes = 360 degrees)
-    // Start at top center (12 o'clock position) by subtracting PI/2
-    float minute_angle = ((s_current_minute / 60.0f) * 2.0f * M_PI) - M_PI_2;
-    // Calculate minute dot position using trigonometric functions
-    int minute_dot_x = center_x + (int)(radius * my_cos(minute_angle));
-    int minute_dot_y = center_y + (int)(radius * my_sin(minute_angle));
-    // Set minute dot color to gray for visibility
-    if (s_settings.dark_mode)
-    {
-        graphics_context_set_fill_color(ctx, GColorLightGray);
-    }
-    else
-    {
-        graphics_context_set_fill_color(ctx, GColorDarkGray);
-    }
-    // Draw 8px minute dot (in front of hour hand)
-    graphics_fill_circle(ctx, GPoint(minute_dot_x, minute_dot_y),
-                         4); // 4px radius = 8px diameter
-    // Draw second dot around circular path (in front of everything)
-    // Calculate angle based on current second (60 seconds = 360 degrees)
-    // Start at top center (12 o'clock position) by subtracting PI/2
-    float angle = ((s_current_second / 60.0f) * 2.0f * M_PI) - M_PI_2;
-    // Calculate dot position using trigonometric functions
-    int dot_x = center_x + (int)(radius * my_cos(angle));
-    int dot_y = center_y + (int)(radius * my_sin(angle));
-    // Set second dot color based on dark mode
-    if (s_settings.dark_mode)
-    {
-        graphics_context_set_fill_color(ctx, GColorWhite);
-    }
-    else
-    {
-        graphics_context_set_fill_color(ctx, GColorBlack);
-    }
-    // Draw 8px second dot (in front of minute and hour hands)
-    graphics_fill_circle(ctx, GPoint(dot_x, dot_y), 4); // 4px radius = 8px diameter
     // Draw white rectangle behind time display to obscure dot
     int time_display_height = SPRITE_HEIGHT; // Exact sprite height
     int time_display_width = total_width; // Exact total width
@@ -743,78 +719,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
     current_x += digit_spacing; // Space after minute tens
     // Draw minute ones digit
     draw_digit(ctx, minute_ones, minute_ones_type, current_x, y_pos);
-    // Draw AM/PM indicator in top left corner with padding (only if enabled and 12-hour format)
-    if (s_settings.show_am_pm && !s_settings.use_24_hour_format)
-    {
-        int am_pm_width = 20;
-        int am_pm_height = 14;
-        int padding_top = 10; // Top padding
-        int padding_left = 10; // Left padding
-        // Validate AM/PM indicator exists
-        if (s_am_pm_indicator)
-        {
-            // Calculate source rectangle for AM/PM indicator
-            // Row 0: P (PM), Row 1: A (AM)
-            int am_pm_row = is_pm ? 0 : 1;
-            GRect am_pm_source_rect = GRect(0, am_pm_row * am_pm_height, am_pm_width,
-                                            am_pm_height);
-            // Calculate destination position in top left corner with padding
-            GRect am_pm_dest_rect = GRect(padding_left, padding_top, am_pm_width,
-                                          am_pm_height);
-            // Set compositing mode for transparency
-            graphics_context_set_compositing_mode(ctx, GCompOpSet);
-            // Create a sub-bitmap for the AM/PM indicator
-            GBitmap *am_pm_bitmap = gbitmap_create_as_sub_bitmap(s_am_pm_indicator,
-                                    am_pm_source_rect);
-            // Draw the AM/PM indicator
-            graphics_draw_bitmap_in_rect(ctx, am_pm_bitmap, am_pm_dest_rect);
-            // Clean up the sub-bitmap
-            gbitmap_destroy(am_pm_bitmap);
-        }
-    }
-    // If AM/PM is not displayed, show month number in top left corner
-    else if (s_date_sprites)
-    {
-        int padding_top = 10; // Top padding
-        int padding_left = 10; // Left padding
-        // Draw month number (1-12) using the current_month variable (which may be overridden by debug mode)
-        draw_month_number(ctx, current_month, padding_left, padding_top);
-    }
-    // Draw calendar day in top right corner with same padding as AM/PM
-    if (s_date_sprites)
-    {
-        int padding_top = 10; // Top padding (same as AM/PM)
-        int padding_right = 10; // Right padding
-        int digit_spacing = 4; // Space between day digits
-        // Calculate total width for calendar day (1 or 2 digits) using the calendar_day variable (which may be overridden by debug mode)
-        int day_number_width;
-        if (calendar_day < 10)
-        {
-            day_number_width = DATE_WIDTH; // Single digit day (full-width)
-        }
-        else
-        {
-            // Two digit day - always use two full-width characters
-            day_number_width = DATE_WIDTH * 2 + digit_spacing;
-        }
-        // Calculate starting X position for right alignment
-        int start_x = bounds.size.w - day_number_width - padding_right;
-        int y_pos = padding_top;
-        // Draw calendar day number
-        if (calendar_day < 10)
-        {
-            // Single digit day - use full-width sprites
-            draw_date_number(ctx, calendar_day, start_x, y_pos);
-        }
-        else
-        {
-            // Two digit day - always use two full-size characters
-            int day_tens = calendar_day / 10;
-            int day_ones = calendar_day % 10;
-            draw_date_number(ctx, day_tens, start_x, y_pos);
-            draw_date_number(ctx, day_ones, start_x + DATE_WIDTH + digit_spacing, y_pos);
-        }
-    }
+    // Draw widgets in top corners using the widget system
+    widgets_draw_corner(ctx, CORNER_TOP_LEFT, tick_time);
+    widgets_draw_corner(ctx, CORNER_TOP_RIGHT, tick_time);
     // Draw day abbreviation in bottom left corner
     if (s_day_sprites)
     {
@@ -897,13 +804,11 @@ static void main_window_load(Window *window)
     s_canvas_layer = layer_create(bounds);
     layer_set_update_proc(s_canvas_layer, canvas_update_proc);
     layer_add_child(window_layer, s_canvas_layer);
-    // Load all sprite sheets with error checking
+    // Load sprite sheets for time display (not handled by widgets)
     s_priority_sprites = gbitmap_create_with_resource(RESOURCE_ID_PRIORITY_DIGIT);
     s_subpriority_sprites = gbitmap_create_with_resource(
                                 RESOURCE_ID_SUBPRIORITY_DIGIT);
-    s_am_pm_indicator = gbitmap_create_with_resource(RESOURCE_ID_AM_PM_INDICATOR);
     s_day_sprites = gbitmap_create_with_resource(RESOURCE_ID_DAY_SPRITES);
-    s_date_sprites = gbitmap_create_with_resource(RESOURCE_ID_DATE_SPRITES);
     // Check if resources loaded successfully
     if (!s_priority_sprites)
     {
@@ -915,15 +820,6 @@ static void main_window_load(Window *window)
         APP_LOG(APP_LOG_LEVEL_INFO, "Priority sprite sheet loaded: %dx%d", size.w,
                 size.h);
     }
-    if (!s_am_pm_indicator)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to load AM/PM indicator sprite sheet");
-    }
-    else
-    {
-        GSize size = gbitmap_get_bounds(s_am_pm_indicator).size;
-        APP_LOG(APP_LOG_LEVEL_INFO, "AM/PM indicator loaded: %dx%d", size.w, size.h);
-    }
     if (!s_day_sprites)
     {
         APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to load day sprite sheet");
@@ -933,23 +829,12 @@ static void main_window_load(Window *window)
         GSize size = gbitmap_get_bounds(s_day_sprites).size;
         APP_LOG(APP_LOG_LEVEL_INFO, "Day sprite sheet loaded: %dx%d", size.w, size.h);
     }
-    if (!s_date_sprites)
-    {
-        APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to load date sprite sheet");
-    }
-    else
-    {
-        GSize size = gbitmap_get_bounds(s_date_sprites).size;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Date sprite sheet loaded: %dx%d", size.w, size.h);
-    }
     // Invert palette colors for dark mode
     if (s_settings.dark_mode)
     {
         invert_bitmap_palette(s_priority_sprites);
         invert_bitmap_palette(s_subpriority_sprites);
-        invert_bitmap_palette(s_am_pm_indicator);
         invert_bitmap_palette(s_day_sprites);
-        invert_bitmap_palette(s_date_sprites);
     }
     // Force initial redraw
     layer_mark_dirty(s_canvas_layer);
@@ -964,15 +849,29 @@ static void main_window_unload(Window *window)
     layer_destroy(s_canvas_layer);
     gbitmap_destroy(s_priority_sprites);
     gbitmap_destroy(s_subpriority_sprites);
-    gbitmap_destroy(s_am_pm_indicator);
     gbitmap_destroy(s_day_sprites);
-    gbitmap_destroy(s_date_sprites);
 }
 
 static void init()
 {
-    // Load settings from persistent storage
+    // Initialize settings with defaults first
+    s_settings = get_default_settings();
+    
+    // Load settings from persistent storage (will override defaults if they exist)
     prv_load_settings();
+    
+    // Link settings to widget system
+    s_settings_dark_mode = s_settings.dark_mode;
+    
+    // Initialize widget system
+    widgets_init();
+    
+    // Set widget configuration from saved settings
+    widgets_set_config(s_settings.widget_config);
+    
+    // Set step goal from saved settings
+    widgets_set_step_goal(s_settings.step_goal);
+    
     // Create main Window element and assign to pointer
     s_main_window = window_create();
     // Set handlers to manage the elements inside the Window
@@ -990,6 +889,9 @@ static void init()
 
 static void deinit()
 {
+    // Deinitialize widget system
+    widgets_deinit();
+    
     // Destroy Window
     window_destroy(s_main_window);
 }
