@@ -22,7 +22,8 @@
       "watchface": true
     },
     "capabilities": [
-      "configurable"
+      "configurable",
+      "health"
     ],
     "messageKeys": [
       "DarkMode",
