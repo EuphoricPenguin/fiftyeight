@@ -32,6 +32,7 @@ typedef struct Settings
     bool use_24_hour_format;
     bool use_two_letter_day;
     bool debug_mode;
+    bool debug_logging;
     bool show_second_dot;
     bool show_hour_minute_dots;
     int step_goal;
@@ -58,5 +59,6 @@ void widgets_reload_sprites(void);
 extern bool s_settings_show_am_pm;
 extern bool s_settings_use_24_hour_format;
 extern bool s_settings_dark_mode;
+extern bool s_settings_debug_logging;
 
 #endif // WIDGETS_H

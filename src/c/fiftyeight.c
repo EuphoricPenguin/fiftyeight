@@ -26,6 +26,7 @@ static void debug_timer_callback(void *data);
 // External settings for widget system
 bool s_settings_use_24_hour_format = false;
 bool s_settings_dark_mode = false;
+bool s_settings_debug_logging = false;
 
 
 static Settings s_settings;
@@ -92,56 +93,51 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
     {
         s_settings.use_two_letter_day = use_two_letter_day_t->value->int32 == 1;
     }
-    Tuple *debug_mode_t = dict_find(iter, MESSAGE_KEY_DebugMode);
-    if (debug_mode_t)
-    {
-        bool new_debug_mode = debug_mode_t->value->int32 == 1;
-        s_settings.debug_mode = new_debug_mode;
-        
-        // Start or stop debug timer based on debug mode setting
-        if (new_debug_mode && !s_debug_timer) {
-            // Start debug timer
-            s_debug_counter = 0;
-            s_debug_timer = app_timer_register(500, debug_timer_callback, NULL);
-        } else if (!new_debug_mode && s_debug_timer) {
-            // Stop debug timer
-            app_timer_cancel(s_debug_timer);
-            s_debug_timer = NULL;
-        }
-    }
     
     // Handle new dot visibility settings
     Tuple *show_second_dot_t = dict_find(iter, MESSAGE_KEY_ShowSecondDot);
     if (show_second_dot_t) {
-        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot received - type: %d", show_second_dot_t->type);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot received - type: %d", show_second_dot_t->type);
+        }
         bool new_show_second_dot;
         if (show_second_dot_t->type == TUPLE_CSTRING) {
             // Convert string to boolean
             const char *show_second_dot_str = show_second_dot_t->value->cstring;
-            APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot as string: '%s'", show_second_dot_str);
+            if (s_settings.debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot as string: '%s'", show_second_dot_str);
+            }
             new_show_second_dot = (strcmp(show_second_dot_str, "true") == 0 || strcmp(show_second_dot_str, "1") == 0);
         } else {
             // Use integer value directly
             new_show_second_dot = show_second_dot_t->value->int32 == 1;
         }
-        APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot setting changed: %d -> %d", s_settings.show_second_dot, new_show_second_dot);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowSecondDot setting changed: %d -> %d", s_settings.show_second_dot, new_show_second_dot);
+        }
         s_settings.show_second_dot = new_show_second_dot;
     }
     
     Tuple *show_hour_minute_dots_t = dict_find(iter, MESSAGE_KEY_ShowHourMinuteDots);
     if (show_hour_minute_dots_t) {
-        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots received - type: %d", show_hour_minute_dots_t->type);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots received - type: %d", show_hour_minute_dots_t->type);
+        }
         bool new_show_hour_minute_dots;
         if (show_hour_minute_dots_t->type == TUPLE_CSTRING) {
             // Convert string to boolean
             const char *show_hour_minute_dots_str = show_hour_minute_dots_t->value->cstring;
-            APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots as string: '%s'", show_hour_minute_dots_str);
+            if (s_settings.debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots as string: '%s'", show_hour_minute_dots_str);
+            }
             new_show_hour_minute_dots = (strcmp(show_hour_minute_dots_str, "true") == 0 || strcmp(show_hour_minute_dots_str, "1") == 0);
         } else {
             // Use integer value directly
             new_show_hour_minute_dots = show_hour_minute_dots_t->value->int32 == 1;
         }
-        APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots setting changed: %d -> %d", s_settings.show_hour_minute_dots, new_show_hour_minute_dots);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "ShowHourMinuteDots setting changed: %d -> %d", s_settings.show_hour_minute_dots, new_show_hour_minute_dots);
+        }
         s_settings.show_hour_minute_dots = new_show_hour_minute_dots;
     }
     
@@ -154,24 +150,32 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
             // Convert string to integer with better error handling
             const char *step_goal_str = step_goal_t->value->cstring;
             step_goal_value = atoi(step_goal_str);
-            APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as string: '%s' -> %ld", step_goal_str, (long)step_goal_value);
+            if (s_settings.debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as string: '%s' -> %ld", step_goal_str, (long)step_goal_value);
+            }
             
             // Validate the conversion
             if (step_goal_value <= 0) {
-                APP_LOG(APP_LOG_LEVEL_WARNING, "Invalid step goal conversion, using default: %ld", (long)step_goal_value);
+                if (s_settings.debug_logging) {
+                    APP_LOG(APP_LOG_LEVEL_WARNING, "Invalid step goal conversion, using default: %ld", (long)step_goal_value);
+                }
                 step_goal_value = 10000; // Default step goal
             }
         } else {
             // Use integer value directly
             step_goal_value = step_goal_t->value->int32;
-            APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as int: %ld (type: %d)", (long)step_goal_value, step_goal_t->type);
+            if (s_settings.debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "Received step_goal as int: %ld (type: %d)", (long)step_goal_value, step_goal_t->type);
+            }
         }
         // Save step goal to settings
         s_settings.step_goal = step_goal_value;
         // Update widget system with new step goal
         widgets_set_step_goal(step_goal_value);
     } else {
-        APP_LOG(APP_LOG_LEVEL_INFO, "No step_goal received, using saved value: %d", s_settings.step_goal);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "No step_goal received, using saved value: %d", s_settings.step_goal);
+        }
     }
     
     // Handle widget configuration
@@ -186,10 +190,14 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
             // Use integer value directly
             widget_value = top_left_widget_t->value->int32;
         }
-        APP_LOG(APP_LOG_LEVEL_INFO, "Received top_left_widget: %ld (type: %d)", (long)widget_value, top_left_widget_t->type);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Received top_left_widget: %ld (type: %d)", (long)widget_value, top_left_widget_t->type);
+        }
         s_settings.widget_config.top_left_widget = (WidgetType)widget_value;
     } else {
-        APP_LOG(APP_LOG_LEVEL_INFO, "No top_left_widget received, using default");
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "No top_left_widget received, using default");
+        }
         s_settings.widget_config.top_left_widget = WIDGET_MONTH_DATE;
     }
     
@@ -204,10 +212,14 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context)
             // Use integer value directly
             widget_value = top_right_widget_t->value->int32;
         }
-        APP_LOG(APP_LOG_LEVEL_INFO, "Received top_right_widget: %ld (type: %d)", (long)widget_value, top_right_widget_t->type);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Received top_right_widget: %ld (type: %d)", (long)widget_value, top_right_widget_t->type);
+        }
         s_settings.widget_config.top_right_widget = (WidgetType)widget_value;
     } else {
-        APP_LOG(APP_LOG_LEVEL_INFO, "No top_right_widget received, using default");
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "No top_right_widget received, using default");
+        }
         s_settings.widget_config.top_right_widget = WIDGET_DAY_DATE;
     }
     
@@ -601,8 +613,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
     int center_y = bounds.size.h / 2;
     int radius = 50; // Radius of circular path
     // Draw hour and minute dots if enabled
-    APP_LOG(APP_LOG_LEVEL_INFO, "Drawing dots - show_hour_minute_dots: %d, show_second_dot: %d", 
-            s_settings.show_hour_minute_dots, s_settings.show_second_dot);
+    if (s_settings.debug_logging) {
+        APP_LOG(APP_LOG_LEVEL_INFO, "Drawing dots - show_hour_minute_dots: %d, show_second_dot: %d", 
+                s_settings.show_hour_minute_dots, s_settings.show_second_dot);
+    }
     if (s_settings.show_hour_minute_dots) {
         // Draw hour dot around circular path (behind everything)
         // Calculate angle based on current hour and minutes for more accuracy
@@ -817,8 +831,10 @@ static void main_window_load(Window *window)
     else
     {
         GSize size = gbitmap_get_bounds(s_priority_sprites).size;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Priority sprite sheet loaded: %dx%d", size.w,
-                size.h);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Priority sprite sheet loaded: %dx%d", size.w,
+                    size.h);
+        }
     }
     if (!s_day_sprites)
     {
@@ -827,7 +843,9 @@ static void main_window_load(Window *window)
     else
     {
         GSize size = gbitmap_get_bounds(s_day_sprites).size;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Day sprite sheet loaded: %dx%d", size.w, size.h);
+        if (s_settings.debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Day sprite sheet loaded: %dx%d", size.w, size.h);
+        }
     }
     // Invert palette colors for dark mode
     if (s_settings.dark_mode)
@@ -860,8 +878,19 @@ static void init()
     // Load settings from persistent storage (will override defaults if they exist)
     prv_load_settings();
     
+    // FORCE debug settings to always use config.h defaults (not user-configurable)
+    s_settings.debug_mode = DEFAULT_DEBUG_MODE;
+    s_settings.debug_logging = DEFAULT_DEBUG_LOGGING;
+    
     // Link settings to widget system
     s_settings_dark_mode = s_settings.dark_mode;
+    s_settings_debug_logging = s_settings.debug_logging;
+    
+    // Start debug timer if debug mode is enabled in config
+    if (s_settings.debug_mode && !s_debug_timer) {
+        s_debug_counter = 0;
+        s_debug_timer = app_timer_register(500, debug_timer_callback, NULL);
+    }
     
     // Initialize widget system
     widgets_init();

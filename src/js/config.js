@@ -132,22 +132,6 @@ module.exports = [
     ]
   },
   {
-    "type": "section",
-    "items": [
-      {
-        "type": "heading",
-        "defaultValue": "Other Stuff"
-      },
-      {
-        "type": "toggle",
-        "messageKey": "DebugMode",
-        "label": "Debug Mode",
-        "defaultValue": false,
-        "description": "Enable debug mode to cycle through all graphics for evaluation"
-      }
-    ]
-  },
-  {
     "type": "submit",
     "defaultValue": "Save Settings"
   }

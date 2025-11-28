@@ -183,11 +183,15 @@ void widgets_init(void) {
         // Step counter is selected but we won't subscribe to health services
         // to prevent pop-ups when health services are disabled
         s_step_count = 0;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Step counter selected but health services not subscribed to prevent pop-ups");
+        if (s_settings_debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Step counter selected but health services not subscribed to prevent pop-ups");
+        }
     } else {
         // Step counter not selected or on Aplite platform
         s_step_count = 0;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Step counter disabled or Aplite platform");
+        if (s_settings_debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Step counter disabled or Aplite platform");
+        }
     }
 }
 
@@ -254,8 +258,10 @@ void widgets_deinit(void) {
 // Set widget configuration
 void widgets_set_config(WidgetConfig config) {
     s_widget_config = config;
-    APP_LOG(APP_LOG_LEVEL_INFO, "Widget config updated: top_left=%d, top_right=%d", 
-            s_widget_config.top_left_widget, s_widget_config.top_right_widget);
+    if (s_settings_debug_logging) {
+        APP_LOG(APP_LOG_LEVEL_INFO, "Widget config updated: top_left=%d, top_right=%d", 
+                s_widget_config.top_left_widget, s_widget_config.top_right_widget);
+    }
     
     // Check if step counter is being enabled via config change
     bool step_counter_selected = (s_widget_config.top_left_widget == WIDGET_STEP_COUNT || 
@@ -272,11 +278,15 @@ void widgets_set_config(WidgetConfig config) {
             time_t end = start + SECONDS_PER_DAY - 1;
             HealthValue steps = health_service_sum(HealthMetricStepCount, start, end);
             s_step_count = (int)steps;
-            APP_LOG(APP_LOG_LEVEL_INFO, "Health services available - step counter activated with %d steps", s_step_count);
+            if (s_settings_debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "Health services available - step counter activated with %d steps", s_step_count);
+            }
         } else {
             // Health services not available, set step count to 0
             s_step_count = 0;
-            APP_LOG(APP_LOG_LEVEL_INFO, "Health services not available - step counter shows empty state");
+            if (s_settings_debug_logging) {
+                APP_LOG(APP_LOG_LEVEL_INFO, "Health services not available - step counter shows empty state");
+            }
         }
     }
 }
@@ -419,12 +429,16 @@ void widgets_draw_corner(GContext *ctx, CornerPosition corner, struct tm *tick_t
         widget_type = s_widget_config.top_right_widget;
     }
     
-    // Debug logging
-    APP_LOG(APP_LOG_LEVEL_INFO, "Drawing corner %d, widget type: %d", corner, widget_type);
+    // Debug logging (only if debug logging is enabled)
+    if (s_settings_debug_logging) {
+        APP_LOG(APP_LOG_LEVEL_INFO, "Drawing corner %d, widget type: %d", corner, widget_type);
+    }
     
     // Skip if no widget selected
     if (widget_type == WIDGET_NONE) {
-        APP_LOG(APP_LOG_LEVEL_INFO, "Skipping corner %d - no widget selected", corner);
+        if (s_settings_debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Skipping corner %d - no widget selected", corner);
+        }
         return;
     }
     
@@ -489,7 +503,9 @@ void widgets_handle_battery_update(void) {
 void widgets_set_step_goal(int step_goal) {
     if (step_goal > 0) {
         s_step_goal = step_goal;
-        APP_LOG(APP_LOG_LEVEL_INFO, "Step goal updated to: %d", s_step_goal);
+        if (s_settings_debug_logging) {
+            APP_LOG(APP_LOG_LEVEL_INFO, "Step goal updated to: %d", s_step_goal);
+        }
     }
 }
 
