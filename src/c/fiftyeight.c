@@ -25,7 +25,6 @@ static void debug_timer_callback(void *data);
 #define MESSAGE_KEY_ShowHourMinuteDots 10008
 
 // External settings for widget system
-bool s_settings_use_24_hour_format = false;
 bool s_settings_dark_mode = false;
 bool s_settings_debug_logging = false;
 
@@ -582,8 +581,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx)
         day_of_week = (s_debug_counter / 5) % 7;
     }
     
-    // Convert hour based on time format setting
-    if (!s_settings.use_24_hour_format)
+    // Convert hour based on time format setting (Clay override or system default)
+    bool use_24_hour = s_settings.use_24_hour_format ? true : clock_is_24h_style();
+    if (!use_24_hour)
     {
         if (hour > 12)
         {
