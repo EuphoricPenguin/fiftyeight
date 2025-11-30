@@ -83,6 +83,11 @@
           "type": "bitmap",
           "name": "STEPS",
           "file": "sprites/steps.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "MOON_PHASE",
+          "file": "sprites/moon.png"
         }
       ]
     }

@@ -10,7 +10,8 @@ typedef enum {
     WIDGET_DAY_DATE,
     WIDGET_AM_PM_INDICATOR,
     WIDGET_BATTERY_INDICATOR,
-    WIDGET_STEP_COUNT
+    WIDGET_STEP_COUNT,
+    WIDGET_MOON_PHASE
 } WidgetType;
 
 // Corner positions
@@ -48,7 +49,6 @@ void widgets_handle_battery_update(void);
 void widgets_handle_health_update(void);
 void widgets_set_step_goal(int step_goal);
 void widgets_reload_sprites(void);
-
 
 // Sprite sheet dimensions
 #define DATE_WIDTH 20

@@ -34,6 +34,10 @@ module.exports = [
             "value": "5"
           },
           {
+            "label": "Moon Phase",
+            "value": "6"
+          },
+          {
             "label": "None",
             "value": "0"
           }
@@ -65,6 +69,10 @@ module.exports = [
           {
             "label": "Step Counter",
             "value": "5"
+          },
+          {
+            "label": "Moon Phase",
+            "value": "6"
           },
           {
             "label": "None",

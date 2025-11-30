@@ -1,5 +1,6 @@
 #include "widgets.h"
 #include <pebble.h>
+#include "math.h"
 
 // Global widget configuration
 static WidgetConfig s_widget_config = {
@@ -12,18 +13,19 @@ static int s_battery_percent = 100;
 static int s_step_count = 0;
 static int s_step_goal = 10000; // Default step goal
 
-// Health service state tracking
-static bool s_health_services_available = false;
-
 // Sprite sheets
 static GBitmap *s_battery_sprites = NULL;
 static GBitmap *s_steps_sprites = NULL;
 static GBitmap *s_date_sprites = NULL;
 static GBitmap *s_am_pm_indicator = NULL;
+static GBitmap *s_moon_sprites = NULL;
 
 // External settings (these will be linked from the main file)
 extern bool s_settings_use_24_hour_format;
 extern bool s_settings_dark_mode;
+
+// Forward declarations for moon phase functions
+static void draw_moon_phase_widget(GContext *ctx, int x, int y, struct tm *tick_time);
 
 // Function to invert bitmap palette for dark mode
 static void invert_bitmap_palette(GBitmap *bitmap) {
@@ -160,6 +162,7 @@ void widgets_init(void) {
     s_steps_sprites = gbitmap_create_with_resource(RESOURCE_ID_STEPS);
     s_date_sprites = gbitmap_create_with_resource(RESOURCE_ID_DATE_SPRITES);
     s_am_pm_indicator = gbitmap_create_with_resource(RESOURCE_ID_AM_PM_INDICATOR);
+    s_moon_sprites = gbitmap_create_with_resource(RESOURCE_ID_MOON_PHASE);
     
     // Invert palette colors for dark mode if enabled
     if (s_settings_dark_mode) {
@@ -167,6 +170,7 @@ void widgets_init(void) {
         invert_bitmap_palette(s_steps_sprites);
         invert_bitmap_palette(s_date_sprites);
         invert_bitmap_palette(s_am_pm_indicator);
+        invert_bitmap_palette(s_moon_sprites);
     }
     
     // Subscribe to battery state updates
@@ -214,12 +218,17 @@ void widgets_reload_sprites(void) {
         gbitmap_destroy(s_am_pm_indicator);
         s_am_pm_indicator = NULL;
     }
+    if (s_moon_sprites) {
+        gbitmap_destroy(s_moon_sprites);
+        s_moon_sprites = NULL;
+    }
     
     // Reload all sprite sheets
     s_battery_sprites = gbitmap_create_with_resource(RESOURCE_ID_BATTERY);
     s_steps_sprites = gbitmap_create_with_resource(RESOURCE_ID_STEPS);
     s_date_sprites = gbitmap_create_with_resource(RESOURCE_ID_DATE_SPRITES);
     s_am_pm_indicator = gbitmap_create_with_resource(RESOURCE_ID_AM_PM_INDICATOR);
+    s_moon_sprites = gbitmap_create_with_resource(RESOURCE_ID_MOON_PHASE);
     
     // Invert palette colors for dark mode if enabled
     if (s_settings_dark_mode) {
@@ -227,6 +236,7 @@ void widgets_reload_sprites(void) {
         invert_bitmap_palette(s_steps_sprites);
         invert_bitmap_palette(s_date_sprites);
         invert_bitmap_palette(s_am_pm_indicator);
+        invert_bitmap_palette(s_moon_sprites);
     }
 }
 
@@ -252,6 +262,10 @@ void widgets_deinit(void) {
     if (s_am_pm_indicator) {
         gbitmap_destroy(s_am_pm_indicator);
         s_am_pm_indicator = NULL;
+    }
+    if (s_moon_sprites) {
+        gbitmap_destroy(s_moon_sprites);
+        s_moon_sprites = NULL;
     }
 }
 
@@ -419,8 +433,8 @@ static void draw_steps_widget(GContext *ctx, int x, int y) {
 // Draw a widget in the specified corner
 void widgets_draw_corner(GContext *ctx, CornerPosition corner, struct tm *tick_time) {
     WidgetType widget_type;
-    int padding_top = 10;
-    int padding_side = 10;
+    int padding_top = 12;  // Increased from 10 to 12 for better top padding
+    int padding_side = 12; // Increased from 10 to 12 for better side padding
     
     // Determine which widget to draw based on corner position
     if (corner == CORNER_TOP_LEFT) {
@@ -463,6 +477,7 @@ void widgets_draw_corner(GContext *ctx, CornerPosition corner, struct tm *tick_t
                 break;
             case WIDGET_BATTERY_INDICATOR:
             case WIDGET_STEP_COUNT:
+            case WIDGET_MOON_PHASE:  // Moon phase also uses 44px width
                 widget_width = 44;
                 break;
             default:
@@ -488,6 +503,9 @@ void widgets_draw_corner(GContext *ctx, CornerPosition corner, struct tm *tick_t
         case WIDGET_STEP_COUNT:
             draw_steps_widget(ctx, x, y);
             break;
+        case WIDGET_MOON_PHASE:
+            draw_moon_phase_widget(ctx, x, y, tick_time);
+            break;
         default:
             break;
     }
@@ -506,6 +524,64 @@ void widgets_set_step_goal(int step_goal) {
         if (s_settings_debug_logging) {
             APP_LOG(APP_LOG_LEVEL_INFO, "Step goal updated to: %d", s_step_goal);
         }
+    }
+}
+
+// Calculate moon phase (0-7) based on date
+static int calculate_moon_phase(struct tm *time_info) {
+    // Convert to Julian date using more accurate formula
+    int year = time_info->tm_year + 1900;
+    int month = time_info->tm_mon + 1;
+    int day = time_info->tm_mday;
+    int hour = time_info->tm_hour;
+    int minute = time_info->tm_min;
+    
+    // More accurate Julian date calculation
+    double a = (14 - month) / 12;
+    double y = year + 4800 - a;
+    double m = month + 12 * a - 3;
+    
+    double jd = day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
+    jd += (hour + minute / 60.0) / 24.0 - 0.5;
+    
+    // Calculate days since known new moon (January 6, 2000 18:14 UTC)
+    // Reference: JD 2451550.1 for January 6, 2000 18:14 UTC
+    double days_since_new_moon = jd - 2451550.1;
+    
+    // Normalize to moon cycle (29.530588853 days)
+    double moon_age = my_fmod(days_since_new_moon, 29.530588853);
+    if (moon_age < 0) moon_age += 29.530588853;
+    
+    // Convert moon age to phase index (0-7) with better phase boundaries
+    // NEW SPRITE ORDER: 0: new moon, 1: waxing crescent, 2: first quarter, 3: waxing gibbous
+    // 4: full moon, 5: waning gibbous, 6: last quarter, 7: waning crescent
+    if (moon_age < 1.0) return 0;        // New moon (0-1 days)
+    else if (moon_age < 7.4) return 1;   // Waxing crescent (1-7.4 days)
+    else if (moon_age < 8.4) return 2;   // First quarter (7.4-8.4 days)
+    else if (moon_age < 14.8) return 3;  // Waxing gibbous (8.4-14.8 days)
+    else if (moon_age < 15.8) return 4;  // Full moon (14.8-15.8 days)
+    else if (moon_age < 22.2) return 5;  // Waning gibbous (15.8-22.2 days)
+    else if (moon_age < 23.2) return 6;  // Last quarter (22.2-23.2 days)
+    else return 7;                       // Waning crescent (23.2-29.5 days)
+}
+
+// Draw moon phase widget
+static void draw_moon_phase_widget(GContext *ctx, int x, int y, struct tm *tick_time) {
+    if (!s_moon_sprites) return;
+    
+    // Calculate moon phase
+    int phase_index = calculate_moon_phase(tick_time);
+    
+    // Moon sprite dimensions: 44x14, 1 column, 8 rows
+    int sprite_height = 14;
+    GRect source_rect = GRect(0, phase_index * sprite_height, 44, sprite_height);
+    GRect dest_rect = GRect(x, y, 44, sprite_height);
+    
+    graphics_context_set_compositing_mode(ctx, GCompOpSet);
+    GBitmap *sprite_bitmap = gbitmap_create_as_sub_bitmap(s_moon_sprites, source_rect);
+    if (sprite_bitmap) {
+        graphics_draw_bitmap_in_rect(ctx, sprite_bitmap, dest_rect);
+        gbitmap_destroy(sprite_bitmap);
     }
 }
 

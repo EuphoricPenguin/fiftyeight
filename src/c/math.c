@@ -158,3 +158,23 @@ float my_acos(float x)
 {
     return M_PI_2 - my_asin(x);
 }
+
+// Custom floating-point modulus function
+float my_fmod(float x, float y)
+{
+    if (y == 0.0f) return 0.0f; // Handle division by zero
+    
+    // Calculate quotient and remainder
+    float quotient = x / y;
+    float integer_part = my_floor(quotient);
+    float remainder = x - integer_part * y;
+    
+    // Ensure remainder has same sign as x
+    if (x < 0.0f && remainder > 0.0f) {
+        remainder -= y;
+    } else if (x > 0.0f && remainder < 0.0f) {
+        remainder += y;
+    }
+    
+    return remainder;
+}

@@ -35,3 +35,6 @@ float my_asin(float x);
 
 // Fast arccosine
 float my_acos(float x);
+
+// Custom floating-point modulus function
+float my_fmod(float x, float y);
